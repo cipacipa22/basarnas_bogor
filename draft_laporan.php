@@ -15,7 +15,7 @@ if ($jam_sekarang < 9) {
     $timestamp_aktif = time();
 }
 
-// Format tanggal untuk tampilan (Bahasa Indonesia manual atau default)
+// Format tanggal untuk tampilan
 $hari_arr = ['Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu'];
 $bulan_arr = ['January' => 'Januari', 'February' => 'Februari', 'March' => 'Maret', 'April' => 'April', 'May' => 'Mei', 'June' => 'Juni', 'July' => 'Juli', 'August' => 'Agustus', 'September' => 'September', 'October' => 'Oktober', 'November' => 'November', 'December' => 'Desember'];
 
@@ -184,20 +184,6 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
             font-weight: 600;
         }
 
-        .badge-tipe {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 4px;
-            font-size: 7pt;
-            font-weight: 700;
-            margin-left: 4px;
-            text-transform: uppercase;
-        }
-        .tipe-khusus {
-            background: #ffebee;
-            color: #d32f2f;
-        }
-
         .btn-edit {
             background: #f39c12;
             color: white;
@@ -273,7 +259,6 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
     </div>
 
     <div class="date-card">
-        <!-- Tanggal otomatis mengikuti shift SAR (ganti hari setelah jam 9 pagi) -->
         <div class="date-text">&#128197; <?= $tanggal_dinas; ?></div>
         <?php if ($status_laporan == 'Selesai'): ?>
             <span class="badge-status badge-selesai">[ Selesai ]</span>
@@ -288,29 +273,32 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
         <?php
         $query = mysqli_query($koneksi, "SELECT * FROM draft_laporan ORDER BY id ASC");
         
-        if (mysqli_num_rows($query) > 0) {
+        if ($query && mysqli_num_rows($query) > 0) {
             while ($row = mysqli_fetch_assoc($query)) {
                 $waktu_kegiatan = !empty($row['waktu']) ? $row['waktu'] : date('H:i') . ' WIB';
                 
-                $nama_kegiatan_db = isset($row['nama_kegiatan']) ? trim($row['nama_kegiatan']) : ''; 
+                // Ambil data dengan fleksibel supaya Pembinaan, Operasi, & Kegiatan Lain tidak tertimbun
+                $nama_kegiatan_db  = isset($row['nama_kegiatan']) ? trim($row['nama_kegiatan']) : ''; 
                 $jenis_kegiatan_db = isset($row['jenis_kegiatan']) ? trim($row['jenis_kegiatan']) : ''; 
                 $opsi_fallback     = isset($row['opsi']) ? trim($row['opsi']) : '';
+                $press_release     = isset($row['press_release']) ? trim($row['press_release']) : '';
 
+                // Logika penamaan sub kegiatan dan kategori agar tampil semua dengan benar
                 if (!empty($nama_kegiatan_db)) {
                     $nama_sub_kegiatan = $nama_kegiatan_db; 
-                    $kategori_utama    = !empty($jenis_kegiatan_db) ? $jenis_kegiatan_db : "Kegiatan Lain";
+                    $kategori_utama    = !empty($jenis_kegiatan_db) ? $jenis_kegiatan_db : "Kegiatan";
                 } elseif (!empty($jenis_kegiatan_db)) {
                     $nama_sub_kegiatan = $jenis_kegiatan_db;
                     $kategori_utama    = "Siaga SAR";
-                } else {
-                    $nama_sub_kegiatan = !empty($opsi_fallback) ? $opsi_fallback : "Kegiatan Lain";
+                } elseif (!empty($opsi_fallback)) {
+                    $nama_sub_kegiatan = $opsi_fallback;
                     $kategori_utama    = "Kegiatan Lain";
+                } else {
+                    $nama_sub_kegiatan = "Kegiatan Tanpa Nama";
+                    $kategori_utama    = "Umum";
                 }
 
-                $keterangan_tipe = ''; 
-                $class_tipe = '';
-
-                $desk_val = !empty($row['deskripsi']) ? $row['deskripsi'] : '-';
+                $desk_val = !empty($row['deskripsi']) ? $row['deskripsi'] : (!empty($press_release) ? $press_release : '-');
                 $id_data  = $row['id'];
         ?>
             <div class="sub-kegiatan-item">
@@ -319,9 +307,6 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
                         <div class="nama-sub-kegiatan"><?= htmlspecialchars($nama_sub_kegiatan); ?></div>
                         <div class="jenis-kegiatan-utama">
                             <?= htmlspecialchars($kategori_utama); ?> 
-                            <?php if (!empty($keterangan_tipe)): ?>
-                                <span class="badge-tipe <?= $class_tipe; ?>"><?= htmlspecialchars($keterangan_tipe); ?></span>
-                            <?php endif; ?>
                         </div>
                     </div>
                     <a href="edit_draft.php?id=<?= $id_data; ?>" class="btn-edit">Edit</a>
@@ -335,8 +320,16 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
                 <div class="kegiatan-row">
                     <span>Bukti:</span><br>
                     <?php 
+                    // Cek berbagai kemungkinan nama kolom foto dokumentasi di database
+                    $kolom_foto = '';
                     if (!empty($row['dokumentasi'])) {
-                        $array_foto = explode(',', $row['dokumentasi']);
+                        $kolom_foto = $row['dokumentasi'];
+                    } elseif (!empty($row['dok'])) {
+                        $kolom_foto = $row['dok'];
+                    }
+
+                    if (!empty($kolom_foto)) {
+                        $array_foto = explode(',', $kolom_foto);
                         $ada_foto = false;
                         
                         echo '<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">';
@@ -358,7 +351,7 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
                     ?>
                 </div>
             </div>
-        <?php 
+        <?>
             }
         } else {
             echo '<div style="text-align:center; color:#777; font-style:italic; padding: 10px 0;">Belum ada kegiatan yang disimpan hari ini.</div>';
@@ -367,6 +360,7 @@ $tanggal_dinas = $nama_hari . ', ' . date('d', $timestamp_aktif) . ' ' . $nama_b
     </div>
 
     <div class="action-footer">
+        <!-- Tombol tambah mengarah kembali ke dashboard sesuai keinginanmu -->
         <a href="dashboard.php" class="btn-tambah">+ Tambah Kegiatan</a>
         <a href="cetak_laporan.php" target="_blank" class="btn-pdf">&#128462; Konversi PDF</a>
     </div>
